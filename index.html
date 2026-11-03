@@ -58,6 +58,18 @@ body{margin:0;background:var(--bg);font-family:'Spline Sans',sans-serif;color:va
 .btn.pay{background:none;border:1px solid var(--muted);color:var(--text)}
 .btn.pay.ok{background:var(--green);border-color:var(--green);color:#06210f}
 .card.gone{opacity:0;transform:translateX(24px);max-height:0;padding-top:0;padding-bottom:0;margin:0;border-width:0;overflow:hidden;transition:opacity .35s,transform .35s,max-height .45s .2s,padding .45s .2s,margin .45s .2s}.btn.hv{background:var(--hivis);color:#111}
+.login{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}
+.login[hidden]{display:none}
+.lbox{width:100%;max-width:360px;background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--hivis);border-radius:14px;padding:22px 18px}
+.lbox .t{font-family:Archivo;font-weight:900;font-size:22px;text-transform:uppercase;letter-spacing:.02em}
+.lbox .s{font-family:'JetBrains Mono';font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:6px 0 18px}
+.lbox label{display:block;font-family:'JetBrains Mono';font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 5px}
+.lbox input{width:100%;border:1px solid var(--line);border-radius:9px;padding:12px 13px;font-size:16px;background:var(--panel-2);color:var(--text);margin-bottom:14px;font-family:'Spline Sans',sans-serif}
+.lbox button{width:100%;border:none;border-radius:9px;padding:13px;background:var(--hivis);color:#111;font-family:'Archivo Narrow';font-weight:700;font-size:15px;text-transform:uppercase;letter-spacing:.05em;cursor:pointer}
+.lbox button:disabled{opacity:.6}
+.lerr{color:var(--red);font-size:13px;min-height:18px;margin-top:10px}
+.lhint{color:var(--muted);font-size:12px;margin-top:12px;line-height:1.5}
+.out{border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:8px;padding:7px 12px;font-family:'Archivo Narrow';font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;margin-left:10px}
 .role{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px;margin-left:auto}
 .role button{border:none;background:none;color:var(--muted);border-radius:999px;padding:7px 14px;font-family:'Archivo Narrow';font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.05em;cursor:pointer}
 .role button.on{background:var(--hivis);color:#111}
@@ -83,9 +95,17 @@ body{margin:0;background:var(--bg);font-family:'Spline Sans',sans-serif;color:va
 </style>
 </head>
 <body>
+<div class="login" id="login" hidden><form class="lbox" id="lform" autocomplete="on">
+  <div class="t">Dispatch Planning</div><div class="s">Lingel · sign in</div>
+  <label for="lname">Your name</label><input id="lname" autocomplete="name" placeholder="e.g. Vishal" required>
+  <label for="lpass">Password</label><input id="lpass" type="password" autocomplete="current-password" required>
+  <button type="submit" id="lgo">Sign in</button>
+  <div class="lerr" id="lerr"></div>
+  <div class="lhint">Planning and dispatch use the same app. Your password decides what you see.</div>
+</form></div>
 <div class="wrap">
   <div class="top"><div class="who" style="margin:0;text-align:left"><b style="font-size:15px">Lingel</b>Dispatch planning</div>
-    <div class="role" id="role"><button data-r="plan">Planning</button><button data-r="disp">Dispatch</button></div></div>
+    <div class="who" id="who"></div><button class="out" id="logout">Log out</button></div>
   <div class="hdr"><div class="t" id="ttl">Dispatch Planning</div><div class="s" id="sub">Approve payment · plan the next day's dispatch</div></div>
 
   <div class="stats" id="stats"></div>
@@ -117,18 +137,35 @@ const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','
 const pretty = s => { if(!s) return ''; const d=new Date(s+'T00:00:00'); return DAY[d.getDay()]+' '+d.getDate()+' '+MON[d.getMonth()]; };
 const whenLabel = s => s===TODAY() ? 'Today · '+pretty(s) : s===TOMORROW() ? 'Tomorrow · '+pretty(s) : (s<TODAY() ? 'Overdue · '+pretty(s) : pretty(s));
 
-const urlRole = new URLSearchParams(location.search).get('role');
-let role = urlRole==='dispatch' ? 'disp' : (ls.get(LS.role)||'plan');
+/* LOGIN: the password decides the role (checked by the script): planning sees and does everything,
+   dispatch sees only the dispatch plan. Session kept on this device until "Log out". */
+const SESS_K='lingel_dp_session'; let sess=null;
+try{ sess=JSON.parse(ls.get(SESS_K)||'null'); }catch(e){}
+let role = (sess && sess.role) || 'disp';
 let tab = ls.get(LS.tab)||'ready', rows = [], region = ls.get(LS.region)||'', q = '', loading = false;
 try{ const c = JSON.parse(ls.get(LS.cache)||'null'); if(c && Array.isArray(c.rows)) rows = c.rows; }catch(e){}
 const pick = {};   // per-offer choice in "Plan dispatch": {day:'tomorrow'|'today'|'later', date, install}
 
-function me(){ try{ const s=JSON.parse(ls.get('lingel_supervisor')||'null'); if(s&&s.name) return s.name; }catch(e){} return ls.get(LS.name)||''; }
-function askName(){ let n=me(); if(!n){ n=(prompt('Your name (shown on approvals and plans)')||'').trim(); if(n) ls.set(LS.name,n); } return n; }
-function askKey(force){ let k=force?'':(ls.get(LS.key)||''); if(!k){ k=(prompt('Office password')||'').trim(); if(k) ls.set(LS.key,k); } return k; }
+function me(){ return (sess && sess.name) || ''; }
+function askName(){ return me(); }
+function askKey(){ return (sess && sess.key) || ''; }
+function showLogin(msg){ $('login').hidden=false; $('lerr').textContent=msg||''; $('lname').value=(sess&&sess.name)||ls.get(LS.name)||''; $('lpass').value=''; setTimeout(()=>($('lname').value?$('lpass'):$('lname')).focus(),50); }
+function logout(msg){ sess=null; ls.del(SESS_K); rows=[]; ls.del(LS.cache); render(); showLogin(msg); }
+async function login(name, key){
+  $('lgo').disabled=true; $('lgo').textContent='Checking…'; $('lerr').textContent='';
+  try{
+    const r=await fetch(API,{method:'POST',body:new URLSearchParams({action:'readyLogin', key})}); const t=(await r.text()).trim();
+    let d; try{ d=JSON.parse(t); }catch(e){ throw new Error(t.charAt(0)==='<'?'Script returned a sign-in page — set the deployment to “Anyone”.':'Unexpected reply from the script'); }
+    if(!d || !d.ok){ throw new Error(/unknown/i.test((d&&d.error)||'')?'Invoice script not updated yet — paste the new version and deploy.':((d&&d.error)||'Sign-in failed')); }
+    sess={name, key, role:d.role}; ls.set(SESS_K, JSON.stringify(sess)); ls.set(LS.name, name);
+    role=d.role; tab = role==='disp' ? 'disp' : (ls.get(LS.tab)||'ready'); $('login').hidden=true; render(); load(false);
+  }catch(e){ $('lerr').textContent=e.message||String(e); }
+  finally{ $('lgo').disabled=false; $('lgo').textContent='Sign in'; }
+}
 function setDot(cls,txt){ $('dot').className='dot '+(cls||''); $('syncTxt').textContent=txt||''; }
 
 async function post(params){
+  params = Object.assign({key:askKey()}, params);
   const r = await fetch(API,{method:'POST',body:new URLSearchParams(params)}); const t=(await r.text()).trim();
   if(t.charAt(0)==='<') throw new Error('Script returned a sign-in page — set the deployment to “Anyone”.');
   let d; try{ d=JSON.parse(t); }catch(e){ throw new Error('Unexpected reply from the script'); }
@@ -136,10 +173,11 @@ async function post(params){
   return d;
 }
 async function load(refresh){
+  if(!sess) return;
   if(loading) return; loading=true; setDot('busy', refresh?'Re-reading the production plan… (can take ~20 s)':'Loading…'); render();
   try{ const d=await post({action:'readyList', refresh:refresh?'1':''}); rows=d.rows||[]; ls.set(LS.cache, JSON.stringify({rows,at:Date.now()}));
     setDot('ok', rows.length+' orders · plan read '+(d.lastSync?new Date(d.lastSync).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'—')); }
-  catch(e){ setDot('err',(rows.length?'Offline · last list · ':'')+(e.message||e)); }
+  catch(e){ if(e.auth){ loading=false; logout('Please sign in again.'); return; } setDot('err',(rows.length?'Offline · last list · ':'')+(e.message||e)); }
   finally{ loading=false; render(); }
 }
 
@@ -156,7 +194,7 @@ const byOffer = (a,b) => String(a.offer).localeCompare(String(b.offer),undefined
 const regSort = (g) => (a,b) => (a==='Address missing')-(b==='Address missing') || g[b].length-g[a].length || a.localeCompare(b);
 
 function render(){
-  document.querySelectorAll('#role button').forEach(b=>b.classList.toggle('on', b.dataset.r===role));
+  $('who').innerHTML = sess ? 'Signed in · '+(role==='plan'?'Planning':'Dispatch')+'<b>'+esc(sess.name)+'</b>' : '';
   const T = tabsFor(); if(!T.some(t=>t[0]===tab)) tab = T[0][0];
   $('ttl').textContent = role==='disp' ? 'Dispatch' : 'Dispatch Planning';
   $('sub').textContent = role==='disp' ? 'What to load · by date and region' : 'Approve payment · plan the next day’s dispatch';
@@ -264,7 +302,7 @@ async function act(kind, offer, extra){
         plan:'#'+offer+' planned for '+whenLabel(params.date), unplan:'#'+offer+' out of the plan — pick a new date'}[kind]);
       render(); return;
     }catch(e){
-      if(e.auth && attempt===0){ ls.del(LS.key); key = askKey(true); if(key){ params.key=key; continue; } }
+      if(e.auth){ Object.assign(o, before); logout('Please sign in again.'); return; }
       Object.assign(o, before); render(); setDot('err','Not saved: '+(e.message||e)); alert('Couldn’t save:\n\n'+(e.message||e)); return;
     }
   }
@@ -275,11 +313,12 @@ async function savePay(params, o){
   for(let attempt=0; attempt<2; attempt++){
     try{ const d=await post(params); if(d.row) Object.assign(o,d.row); else Object.assign(o,{stage:'paid',paid:true});
       ls.set(LS.cache, JSON.stringify({rows,at:Date.now()})); return; }
-    catch(e){ if(e.auth && attempt===0){ ls.del(LS.key); const k=askKey(true); if(k){ params.key=k; continue; } } throw e; }
+    catch(e){ if(e.auth){ logout('Please sign in again.'); } throw e; }
   }
 }
 /* ---------- wiring ---------- */
-$('role').onclick = e=>{ const b=e.target.closest('button[data-r]'); if(!b) return; role=b.dataset.r; ls.set(LS.role, role); tab = role==='disp' ? 'disp' : (ls.get(LS.tab)||'ready'); render(); };
+$('logout').onclick = ()=>{ if(confirm('Log out of Dispatch Planning on this device?')) logout(''); };
+$('lform').onsubmit = e=>{ e.preventDefault(); const n=$('lname').value.trim(), k=$('lpass').value; if(n&&k) login(n,k); };
 $('tabs').onclick = e=>{ const b=e.target.closest('.vtab'); if(!b) return; tab=b.dataset.t; if(role==='plan') ls.set(LS.tab, tab); render(); };
 $('chips').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; region=c.dataset.r; ls.set(LS.region, region); render(); };
 $('q').oninput = e=>{ q=e.target.value.trim().toLowerCase(); render(); };
@@ -293,7 +332,7 @@ $('list').addEventListener('change', e=>{
   const s=e.target.closest('select[data-act="region"]'); if(s){ act('region', s.dataset.o, s.value); return; }
   const dp=e.target.closest('input[data-pdate]'); if(dp){ const off=dp.dataset.pdate; pick[off]=Object.assign(pick[off]||{}, {date:dp.value}); }
 });
-render(); load(false);
+render(); if(sess) load(false); else showLogin('');
 setInterval(()=>{ if(!document.hidden) load(false); }, 90000);
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) load(false); });
 </script>

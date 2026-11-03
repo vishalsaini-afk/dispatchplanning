@@ -1,10 +1,14 @@
 # Lingel · Dispatch Planning
 
-Separate app for the dispatch planning team. It sends its data to Team Availability (To Assign → Ready & paid).
+Separate app for dispatch planning. It sends its data to Team Availability (To Assign → Ready & paid).
 
-- **Planning:** https://vishalsaini-afk.github.io/dispatchplanning/ (office password)
-  Waiting payment → Plan dispatch (date + installation needed / supply only) → Dispatch plan
-- **Dispatch:** https://vishalsaini-afk.github.io/dispatchplanning/?role=dispatch
-  What to load, by date and region (only orders whose loading the installation team confirmed)
+**Link (one for everyone):** https://vishalsaini-afk.github.io/dispatchplanning/
 
-Backend: the Lingel invoice Apps Script (`readyList`, `readyApprove`, `readyPlan`, …), "Ready Orders" tab in the Installation invoice sheet.
+Sign in with your name + password. The password decides what you see (checked by the script):
+
+| Login | Sees | Can do |
+|---|---|---|
+| Planning (`DP_KEY`) | Waiting payment · Plan dispatch · Dispatch plan | Payment received, plan date + installation, change region/date |
+| Dispatch (`DP_DISPATCH_KEY`) | Dispatch plan only (planned + loading confirmed) | View |
+
+Backend: the Lingel invoice Apps Script (`readyLogin`, `readyList`, `readyApprove`, `readyPlan`, …), "Ready Orders" tab in the Installation invoice sheet.
