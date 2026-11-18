@@ -92,6 +92,7 @@ body{margin:0;background:var(--bg);font-family:'Spline Sans',sans-serif;color:va
 .skel{background:linear-gradient(90deg,var(--panel) 0%,var(--panel-2) 50%,var(--panel) 100%);background-size:200% 100%;animation:sk 1.2s infinite;border-radius:12px;height:96px;margin-bottom:9px}
 @keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
 @media (max-width:420px){.stat .n{font-size:20px}.vtab{font-size:12px}}
+.pdays{display:inline-block;font-size:12px;font-weight:700;border:1px solid;border-radius:999px;padding:2px 9px}
 </style>
 </head>
 <body>
@@ -234,6 +235,12 @@ function emptyText(){
   if(tab==='ready') return q||region ? 'No order waiting for payment in this filter.' : '✅ No Ready order is waiting for payment approval.';
   return 'Nothing in the dispatch plan yet.';
 }
+function paidDays(s){ s=String(s||'').trim(); if(!s) return null;
+  const M={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+  let d=null, m=s.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})/); if(m&&M[m[2].toLowerCase()]!=null) d=new Date(+m[3],M[m[2].toLowerCase()],+m[1]); else { const t=new Date(s); if(!isNaN(t)) d=new Date(t.getFullYear(),t.getMonth(),t.getDate()); }
+  if(!d) return null; const n=new Date(); n.setHours(0,0,0,0); return Math.max(0,Math.round((n-d)/86400000)); }
+function paidAgo(s){ const n=paidDays(s); if(n==null) return ''; const c=n>=7?'#fca5a5':(n>=3?'#fbbf24':'#86efac');
+  return '<span class="pdays" style="color:'+c+';border-color:'+c+'">⏱ '+(n===0?'paid today':n+' day'+(n>1?'s':'')+' since payment')+'</span>'; }
 function card(o){
   const left = /^left ready/i.test(o.status) ? ' <span class="tag" style="border-color:var(--amber);color:var(--amber)">no longer Ready</span>' : '';
   const ins = o.install ? '<span class="insT '+(o.install==='No'?'n':'y')+'">'+(o.install==='No'?'📦 Supply only':'🔧 Installation needed')+'</span>' : '';
@@ -257,6 +264,7 @@ function card(o){
     + '<div class="cl">'+esc(o.client||'—')+'</div></div>'+(o.stage!=='ready' && o.stage!=='paid' ? ins : '')+'</div>'
     + '<div class="meta">🧑‍💼 '+esc(o.sales||'—')+(o.units?' · '+esc(o.units)+' units':'')+' · 📍 '+esc(o.address||'no address')
     + (o.stage==='ready' && o.readySince ? '<br>Ready since '+esc(o.readySince) : '')+'</div>'
+    + (o.paid && o.approvedOn ? '<div style="margin:6px 0 2px">'+paidAgo(o.approvedOn)+'</div>' : '')
     + '<div class="acts">'+acts+'</div></div>';
 }
 const rsel = o => '<select class="rsel" data-act="region" data-o="'+esc(o.offer)+'" title="Change region">'+REGIONS.map(r=>'<option'+(r===o.region?' selected':'')+'>'+esc(r)+'</option>').join('')+'</select>';
