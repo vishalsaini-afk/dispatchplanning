@@ -140,7 +140,7 @@ function dp_rowObj_(r){
     confirmed:conf, install:String(o['Installation Needed']), confirmedBy:String(o['Confirmed By']), confirmedOn:String(o['Confirmed On']),
     dispatchDate:dd, plannedBy:String(o['Planned By']), plannedOn:String(o['Planned On']),
     /* ready = waiting payment · paid = needs a dispatch date · planned = dated, waiting loading confirmation · dispatch = dated + loading confirmed */
-    stage: !paid ? 'ready' : (!dd ? 'paid' : (conf ? 'dispatch' : 'planned')) };
+    stage: !paid ? 'ready' : (conf ? 'dispatch' : (dd ? 'planned' : 'paid')) /* paid + loading confirmed → dispatch, date optional */ };
 }
 
 /* re-read ORDER PLANNING at most every 2 minutes (or on refresh), keep approvals */

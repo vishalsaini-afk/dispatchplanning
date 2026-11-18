@@ -182,12 +182,12 @@ async function load(refresh){
 }
 
 /* ---------- what each tab shows ---------- */
-function tabsFor(){ return role==='disp' ? [['disp','Dispatch plan']] : [['ready','Waiting payment'],['paid','Plan dispatch'],['plan','Dispatch plan']]; }
+function tabsFor(){ return role==='disp' ? [['disp','Dispatch plan']] : [['ready','Waiting payment'],['plan','Dispatch plan']]; }
 function inTab(o){
   if(role==='disp') return o.stage==='dispatch';
   if(tab==='ready') return o.stage==='ready';
   if(tab==='paid') return o.stage==='paid';
-  return o.stage==='planned' || o.stage==='dispatch';
+  return o.stage==='paid' || o.stage==='planned' || o.stage==='dispatch';
 }
 const match = o => !q || [o.offer,o.client,o.sales,o.address,o.region,o.code].join(' ').toLowerCase().includes(q);
 const byOffer = (a,b) => String(a.offer).localeCompare(String(b.offer),undefined,{numeric:true});
@@ -197,13 +197,13 @@ function render(){
   $('who').innerHTML = sess ? 'Signed in · '+(role==='plan'?'Planning':'Dispatch')+'<b>'+esc(sess.name)+'</b>' : '';
   const T = tabsFor(); if(!T.some(t=>t[0]===tab)) tab = T[0][0];
   $('ttl').textContent = role==='disp' ? 'Dispatch' : 'Dispatch Planning';
-  $('sub').textContent = role==='disp' ? 'What to load · by date and region' : 'Approve payment · plan the next day’s dispatch';
+  $('sub').textContent = role==='disp' ? 'What to load · by date and region' : 'Approve payment · track loading';
   const n = k => rows.filter(o=>o.stage===k).length;
   const tm = rows.filter(o=>o.stage==='dispatch' && o.dispatchDate===TOMORROW()).length, td = rows.filter(o=>o.stage==='dispatch' && o.dispatchDate===TODAY()).length;
   $('stats').innerHTML = role==='disp'
     ? st('b',td,'Today')+st('g',tm,'Tomorrow')+st('a',rows.filter(o=>o.stage==='dispatch' && o.dispatchDate<TODAY()).length,'Overdue')
-    : st('a',n('ready'),'Waiting payment')+st('g',n('paid'),'Needs a date')+st('b',n('planned')+n('dispatch'),'In dispatch plan');
-  const cnt = { ready:n('ready'), paid:n('paid'), plan:n('planned')+n('dispatch'), disp:n('dispatch') };
+    : st('a',n('ready'),'Waiting payment')+st('g',n('paid')+n('planned'),'Waiting loading')+st('b',n('dispatch'),'Loading confirmed');
+  const cnt = { ready:n('ready'), paid:n('paid'), plan:n('paid')+n('planned')+n('dispatch'), disp:n('dispatch') };
   $('tabs').innerHTML = T.map(t=>'<button class="vtab'+(t[0]===tab?' on':'')+'" data-t="'+t[0]+'">'+t[1]+'<span class="vb">'+cnt[t[0]]+'</span></button>').join('');
   $('tabs').style.display = T.length>1 ? '' : 'none';
 
@@ -217,10 +217,10 @@ function render(){
   if(!list.length){ box.innerHTML='<div class="msg">'+emptyText()+'</div>'; return; }
 
   if(role==='disp' || tab==='plan'){   // grouped by DATE, then region
-    const byDate = {}; list.forEach(o=>{ (byDate[o.dispatchDate]=byDate[o.dispatchDate]||[]).push(o); });
+    const byDate = {}; list.forEach(o=>{ const k=o.dispatchDate||'~'; (byDate[k]=byDate[k]||[]).push(o); });
     box.innerHTML = Object.keys(byDate).sort().map(d=>{
       const g={}; byDate[d].forEach(o=>{ (g[o.region]=g[o.region]||[]).push(o); });
-      return '<div class="dhead'+(d<TODAY()?' late':'')+'">'+esc(whenLabel(d))+'<span class="c">'+byDate[d].length+' order'+(byDate[d].length>1?'s':'')+'</span></div>'
+      return (d==='~' ? '' : '<div class="dhead'+(d<TODAY()?' late':'')+'">'+esc(whenLabel(d))+'<span class="c">'+byDate[d].length+' order'+(byDate[d].length>1?'s':'')+'</span></div>')
         + Object.keys(g).sort(regSort(g)).map(r=>'<div class="rsec"><div class="rhead">'+esc(r)+'<span class="c">'+g[r].length+'</span></div>'+g[r].sort(byOffer).map(card).join('')+'</div>').join('');
     }).join('');
   } else {                              // grouped by region
@@ -230,9 +230,8 @@ function render(){
 }
 const st = (c,n,l) => '<div class="stat '+c+'"><div class="n">'+n+'</div><div class="l">'+l+'</div></div>';
 function emptyText(){
-  if(role==='disp') return 'Nothing to load yet.<br><span style="font-size:12px">Orders show here once they are planned for a date and the installation team has confirmed loading.</span>';
+  if(role==='disp') return 'Nothing to load yet.<br><span style="font-size:12px">Orders show here once payment is received and the installation team has confirmed loading.</span>';
   if(tab==='ready') return q||region ? 'No order waiting for payment in this filter.' : '✅ No Ready order is waiting for payment approval.';
-  if(tab==='paid') return 'No paid order is waiting for a dispatch date.';
   return 'Nothing in the dispatch plan yet.';
 }
 function card(o){
@@ -245,18 +244,14 @@ function card(o){
   } else if(o.stage==='ready'){
     acts = '<button class="btn pay" data-act="approve" data-o="'+esc(o.offer)+'">Payment received?</button>'+rsel(o);
   } else if(o.stage==='paid'){
-    const p = pick[o.offer] || (pick[o.offer] = {day:'tomorrow', date:'', install: o.install==='No' ? 'No' : 'Yes'});
     acts = '<span class="done">✓ Paid'+(o.approvedBy?' · '+esc(o.approvedBy):'')+'</span>'
-      + '<div class="seg" data-pday="'+esc(o.offer)+'"><button data-v="today"'+(p.day==='today'?' class="on"':'')+'>Today</button><button data-v="tomorrow"'+(p.day==='tomorrow'?' class="on"':'')+'>Tomorrow</button><button data-v="later"'+(p.day==='later'?' class="on"':'')+'>Later…</button></div>'
-      + (p.day==='later' ? '<input type="date" class="dpick" data-pdate="'+esc(o.offer)+'" min="'+TODAY()+'" value="'+esc(p.date||TOMORROW())+'">' : '')
-      + '<div class="seg" data-pins="'+esc(o.offer)+'"><button data-v="Yes"'+(p.install!=='No'?' class="on"':'')+'>Installation needed</button><button data-v="No"'+(p.install==='No'?' class="on"':'')+'>Supply only</button></div>'
-      + '<button class="btn hv" data-act="plan" data-o="'+esc(o.offer)+'">📅 Add to plan</button>'
+      + '<span class="wait">⏳ Waiting for the installation team to confirm loading (Team Availability → Ready &amp; paid)</span>'
       + '<button class="btn ghost" data-act="undo" data-o="'+esc(o.offer)+'">Undo payment</button>';
   } else {
-    acts = '<span class="done">📅 '+esc(whenLabel(o.dispatchDate))+(o.plannedBy?' · '+esc(o.plannedBy):'')+'</span>'
+    acts = (o.dispatchDate ? '<span class="done">📅 '+esc(whenLabel(o.dispatchDate))+(o.plannedBy?' · '+esc(o.plannedBy):'')+'</span>' : '')
       + (o.stage==='dispatch' ? '<span class="sentx">🚚 Loading confirmed'+(o.confirmedBy?' · '+esc(o.confirmedBy):'')+'</span>'
                               : '<span class="wait">⏳ Waiting for the installation team to confirm loading (Team Availability → Ready &amp; paid)</span>')
-      + '<button class="btn ghost" data-act="unplan" data-o="'+esc(o.offer)+'">Change date</button>';
+      ;
   }
   return '<div class="'+cls+'" data-card="'+esc(o.offer)+'"><div class="ch"><div><div class="off">#'+esc(o.offer)+'<span class="tag">'+esc(o.dept)+'</span>'+(o.code?'<span class="tag">'+esc(o.code)+'</span>':'')+left+'</div>'
     + '<div class="cl">'+esc(o.client||'—')+'</div></div>'+(o.stage!=='ready' && o.stage!=='paid' ? ins : '')+'</div>'
@@ -288,7 +283,7 @@ async function act(kind, offer, extra){
     await new Promise(r=>setTimeout(r,700));                    // let the green show
     if(cardEl) cardEl.classList.add('gone');
     await new Promise(r=>setTimeout(r,650));
-    setDot('ok','#'+offer+' · payment received — now in Plan dispatch'); render(); return;
+    setDot('ok','#'+offer+' · payment received — now in Dispatch plan'); render(); return;
   }
   if(kind==='undo') Object.assign(o,{stage:'ready',paid:false,approvedBy:'',dispatchDate:''});
   if(kind==='region') Object.assign(o,{region:extra});
@@ -298,7 +293,7 @@ async function act(kind, offer, extra){
   for(let attempt=0; attempt<2; attempt++){
     try{
       const d = await post(params); if(d.row) Object.assign(o, d.row); ls.set(LS.cache, JSON.stringify({rows,at:Date.now()}));
-      setDot('ok', {approve:'#'+offer+' · payment received — now in Plan dispatch', undo:'#'+offer+' back to Waiting payment', region:'#'+offer+' region → '+extra,
+      setDot('ok', {approve:'#'+offer+' · payment received — now in Dispatch plan', undo:'#'+offer+' back to Waiting payment', region:'#'+offer+' region → '+extra,
         plan:'#'+offer+' planned for '+whenLabel(params.date), unplan:'#'+offer+' out of the plan — pick a new date'}[kind]);
       render(); return;
     }catch(e){
