@@ -88,9 +88,10 @@ function readyRoute_(a, p){
       if(role==='team') L.rows = L.rows.filter(function(o){ return o.paid; });
       L.role = role; return L;
     }
-    if(a==='readyApprove' || a==='readyUnapprove' || a==='readyRegion' || a==='readyPlan' || a==='readyUnplan'){
+    if(a==='readyApprove' || a==='readyUnapprove' || a==='readyRegion'){
       if(role!=='plan') return {ok:false, error:'Only the planning login can do this'};
     }
+    if((a==='readyPlan' || a==='readyUnplan') && role!=='plan' && role!=='team') return {ok:false, error:'Only planning or Team Availability can set the dispatch date'};
     if((a==='readyConfirm' || a==='readyUnconfirm') && role!=='team' && role!=='plan') return {ok:false, error:'Loading is confirmed from Team Availability'};
     var lock = LockService.getScriptLock(); if(!lock.tryLock(20000)) return {ok:false, error:'Sheet busy — try again'};
     try{
@@ -102,7 +103,7 @@ function readyRoute_(a, p){
       if(a==='readyPlan'){
         if(String(sh.getRange(row, DP_HEAD.indexOf('Payment')+1).getValue())!=='Received') return {ok:false, error:'Mark payment received first'};
         var dd = String(p.date||'').trim(); if(!/^\d{4}-\d{2}-\d{2}$/.test(dd)) return {ok:false, error:'Pick a dispatch date'};
-        set('Dispatch Date', "'"+dd); set('Installation Needed', /^n/i.test(String(p.install||'')) ? 'No' : 'Yes'); set('Planned By', by); set('Planned On', now);
+        set('Dispatch Date', "'"+dd); if(String(p.install||'').trim()) set('Installation Needed', /^n/i.test(String(p.install)) ? 'No' : 'Yes'); set('Planned By', by); set('Planned On', now);
       }
       if(a==='readyUnplan'){ set('Dispatch Date',''); set('Planned By',''); set('Planned On',''); }
       if(a==='readyRegion'){ set('Region (manual)', String(p.region||'').trim()); }
